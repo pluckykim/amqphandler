@@ -9,31 +9,33 @@ import (
 )
 
 type RabbitmqHandler struct {
-	conn        *amqp.Connection
-	channel     *amqp.Channel
-	uri         string
-	amqpError   chan *amqp.Error
-	consumerTag string
-	queueName   string
-	logger      *log.Logger
+	conn         *amqp.Connection
+	channel      *amqp.Channel
+	uri          string
+	amqpError    chan *amqp.Error
+	consumerTag  string
+	queueName    string
+	logger       *log.Logger
+	amqpDelivery chan []byte
 }
 
-func newRabbitmqHandler(uri, queueName string) *RabbitmqHandler {
+func newRabbitmqHandler(uri, queueName string, amqpDelivery chan []byte) *RabbitmqHandler {
 	hostname, err := os.Hostname()
 	if err != nil {
 		hostname = "_deviceeventrabbit"
 	}
 	rabbitmq_handler_instance := &RabbitmqHandler{
-		consumerTag: fmt.Sprintf("DeviceEventLogger-%s-%s", hostname, time.Now().Format(time.RFC850)),
-		uri:         uri,
-		queueName:   queueName,
-		logger:      log.New(os.Stderr, "INFO: ", log.LstdFlags|log.Ldate|log.Ltime),
+		consumerTag:  fmt.Sprintf("DeviceEventLogger-%s-%s", hostname, time.Now().Format(time.RFC850)),
+		uri:          uri,
+		queueName:    queueName,
+		logger:       log.New(os.Stderr, "INFO: ", log.LstdFlags|log.Ldate|log.Ltime),
+		amqpDelivery: amqpDelivery,
 	}
 	return rabbitmq_handler_instance
 }
 
-func StartRabbitmqHandler(uri, queueName string) {
-	rabbitmq_handler := newRabbitmqHandler(uri, queueName)
+func StartRabbitmqHandler(uri, queueName string, amqpDelivery chan []byte) {
+	rabbitmq_handler := newRabbitmqHandler(uri, queueName, amqpDelivery)
 	rabbitmq_handler.amqpError = make(chan *amqp.Error)
 	rabbitmq_handler.Connect()
 
@@ -127,6 +129,7 @@ func (r *RabbitmqHandler) PrepareConsume() error {
 	go func() {
 		for d := range amqp_delivery {
 			r.logger.Printf("Received a message: %s", d.Body)
+			r.amqpDelivery <- d.Body
 		}
 	}()
 
